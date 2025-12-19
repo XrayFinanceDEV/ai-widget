@@ -1,14 +1,23 @@
 'use client'
 
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { MessageSquare, Send, Sparkles } from 'lucide-react'
-import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport } from 'ai'
+import { Sparkles, MessageCircle } from 'lucide-react'
 import { useState } from 'react'
+import Image from 'next/image'
+import chatIcon from '@/public/chat-icon.png'
+import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation'
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
+import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from '@/components/ai-elements/prompt-input'
+import { Loader } from '@/components/ai-elements/loader'
+import { ModeToggle } from '@/components/mode-toggle'
+
+interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+}
 
 interface AIChatWidgetProps {
   flowId?: string
@@ -33,21 +42,8 @@ export function AIChatWidget({
 }: AIChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState('')
-
-  const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({
-      api: apiEndpoint,
-      body: {
-        flowId,
-      },
-    }),
-  })
-
-  const isLoading = status === 'submitted' || status === 'streaming'
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value)
-  }
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [isLoading, setIsLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,7 +51,36 @@ export function AIChatWidget({
 
     const messageContent = input
     setInput('')
-    await sendMessage({ text: messageContent })
+
+    // Add user message
+    const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: messageContent
+    }
+    setMessages(prev => [...prev, userMessage])
+    setIsLoading(true)
+
+    try {
+      // Send to API
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...messages, userMessage],
+          flowId
+        })
+      })
+
+      if (!response.ok) throw new Error('Failed to get response')
+
+      const assistantMessage = await response.json()
+      setMessages(prev => [...prev, assistantMessage])
+    } catch (error) {
+      console.error('Chat error:', error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const onQuickAction = (action: string) => {
@@ -67,21 +92,33 @@ export function AIChatWidget({
       <SheetTrigger asChild>
         <Button
           size="lg"
-          className="fixed bottom-8 right-8 h-14 w-14 rounded-full shadow-lg z-50 hover:scale-110 transition-transform"
+          className="fixed bottom-8 right-8 h-16 w-16 rounded-full shadow-lg z-50 hover:scale-110 transition-transform bg-primary hover:bg-primary/90"
         >
-          <MessageSquare className="h-6 w-6" />
+          <Image
+            src={chatIcon}
+            alt="Chat"
+            width={40}
+            height={40}
+            className="object-contain"
+          />
         </Button>
       </SheetTrigger>
 
       <SheetContent
         side="right"
-        className="w-[400px] sm:w-[540px] flex flex-col p-0 shadow-2xl border-l"
+        className="w-full sm:w-[50vw] lg:w-[33vw] max-w-[800px] flex flex-col p-0 shadow-2xl border-l"
       >
         <SheetHeader className="p-6 pb-4 border-b">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <SheetTitle>{title}</SheetTitle>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <SheetTitle>{title}</SheetTitle>
+            </div>
+            <ModeToggle />
           </div>
+          <SheetDescription className="sr-only">
+            Chat with the AI assistant
+          </SheetDescription>
           {subtitle && (
             <Badge variant="outline" className="w-fit mt-2">
               {subtitle}
@@ -89,8 +126,8 @@ export function AIChatWidget({
           )}
         </SheetHeader>
 
-        <ScrollArea className="flex-1 p-6">
-          <div className="space-y-4">
+        <Conversation className="flex-1">
+          <ConversationContent className="flex flex-col gap-6">
             {messages.length === 0 && (
               <div className="bg-blue-50 dark:bg-blue-950 border-l-4 border-blue-500 p-4 rounded-r">
                 <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -100,32 +137,55 @@ export function AIChatWidget({
             )}
 
             {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[85%] p-3 rounded-lg ${
-                    message.role === 'user'
-                      ? 'bg-gray-100 dark:bg-gray-800'
-                      : 'bg-blue-50 dark:bg-blue-950 border-l-4 border-blue-500'
-                  }`}
-                >
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+              <Message key={message.id} from={message.role}>
+                <div className="flex gap-3 items-start">
+                  {message.role === 'assistant' && (
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+                      <Image
+                        src={chatIcon}
+                        alt="AI"
+                        width={24}
+                        height={24}
+                        className="object-contain"
+                      />
+                    </div>
+                  )}
+                  <MessageContent>
+                    <MessageResponse>{message.content}</MessageResponse>
+                  </MessageContent>
+                  {message.role === 'user' && (
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
+                      <span className="text-sm">👤</span>
+                    </div>
+                  )}
                 </div>
-              </div>
+              </Message>
             ))}
 
             {isLoading && (
-              <div className="bg-blue-50 dark:bg-blue-950 border-l-4 border-blue-500 p-3 rounded-r">
-                <div className="flex items-center gap-2">
-                  <div className="animate-pulse">💭</div>
-                  <span className="text-sm">AI is thinking...</span>
+              <Message from="assistant">
+                <div className="flex gap-3 items-start">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+                    <Image
+                      src={chatIcon}
+                      alt="AI"
+                      width={24}
+                      height={24}
+                      className="object-contain"
+                    />
+                  </div>
+                  <MessageContent>
+                    <div className="flex items-center gap-2">
+                      <Loader size={16} />
+                      <span className="text-sm text-muted-foreground">AI is thinking...</span>
+                    </div>
+                  </MessageContent>
                 </div>
-              </div>
+              </Message>
             )}
-          </div>
-        </ScrollArea>
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
 
         <div className="p-6 pt-4 border-t">
           {messages.length === 0 && quickActions.length > 0 && (
@@ -144,23 +204,21 @@ export function AIChatWidget({
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <Textarea
+          <PromptInput
+            onSubmit={(message, event) => {
+              handleSubmit(event)
+            }}
+          >
+            <PromptInputTextarea
               value={input}
-              onChange={handleInputChange}
+              onChange={(e) => setInput(e.target.value)}
               placeholder="Type your message..."
-              className="min-h-[60px] resize-none"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSubmit(e as any)
-                }
-              }}
             />
-            <Button type="submit" size="icon" disabled={isLoading || !input.trim()}>
-              <Send className="h-4 w-4" />
-            </Button>
-          </form>
+            <PromptInputFooter>
+              <div />
+              <PromptInputSubmit disabled={isLoading || !input.trim()} />
+            </PromptInputFooter>
+          </PromptInput>
         </div>
       </SheetContent>
     </Sheet>

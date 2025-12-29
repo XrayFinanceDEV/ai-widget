@@ -61,6 +61,15 @@ export function AIChatWidget({
     setMessages(prev => [...prev, userMessage])
     setIsLoading(true)
 
+    // Create assistant message that will be updated as stream comes in
+    const assistantMessageId = crypto.randomUUID()
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: ''
+    }
+    setMessages(prev => [...prev, assistantMessage])
+
     try {
       // Send to API
       const response = await fetch(apiEndpoint, {
@@ -74,10 +83,36 @@ export function AIChatWidget({
 
       if (!response.ok) throw new Error('Failed to get response')
 
-      const assistantMessage = await response.json()
-      setMessages(prev => [...prev, assistantMessage])
+      // Read the streaming response
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No response body')
+      }
+
+      let accumulatedContent = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        accumulatedContent += chunk
+
+        // Update the assistant message with accumulated content
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === assistantMessageId
+              ? { ...msg, content: accumulatedContent }
+              : msg
+          )
+        )
+      }
     } catch (error) {
       console.error('Chat error:', error)
+      // Remove the assistant message if there was an error
+      setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
     } finally {
       setIsLoading(false)
     }

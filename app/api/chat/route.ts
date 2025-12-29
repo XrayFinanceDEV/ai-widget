@@ -24,19 +24,21 @@ export async function POST(req: Request) {
     // Generate session ID for conversation continuity
     const sessionId = crypto.randomUUID()
 
-    // Call Langflow API
-    const langflowResponse = await fetch(`${langflowEndpoint}/api/v1/run/${flowId}`, {
+    // Call Langflow API (matches working example from Langflow)
+    const payload = {
+      output_type: 'chat',
+      input_type: 'chat',
+      input_value: inputValue,
+      session_id: sessionId
+    }
+
+    const langflowResponse = await fetch(`${langflowEndpoint}/api/v1/run/${flowId}?stream=true`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(langflowApiKey && { 'Authorization': `Bearer ${langflowApiKey}` })
+        ...(langflowApiKey && { 'x-api-key': langflowApiKey })
       },
-      body: JSON.stringify({
-        output_type: 'chat',
-        input_type: 'chat',
-        input_value: inputValue,
-        session_id: sessionId
-      })
+      body: JSON.stringify(payload)
     })
 
     if (!langflowResponse.ok) {
@@ -44,27 +46,86 @@ export async function POST(req: Request) {
       throw new Error(`Langflow API error: ${langflowResponse.statusText} - ${errorText}`)
     }
 
-    const langflowData = await langflowResponse.json()
+    // Stream the response directly to the client
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = langflowResponse.body?.getReader()
+        const decoder = new TextDecoder()
 
-    // Debug: Log the full Langflow response
-    console.log('Langflow response:', JSON.stringify(langflowData, null, 2))
+        if (!reader) {
+          controller.close()
+          return
+        }
 
-    // Extract the response from Langflow
-    // Adjust this based on your Langflow flow output structure
-    const aiResponse = langflowData.outputs?.[0]?.outputs?.[0]?.results?.message?.text ||
-                      langflowData.result ||
-                      'No response from Langflow'
+        // Helper function to add delay for natural typing effect
+        const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-    console.log('Extracted AI response:', aiResponse)
+        try {
+          let buffer = ''
+          while (true) {
+            const { done, value } = await reader.read()
 
-    // Return simple JSON response for the widget to handle
-    return new Response(JSON.stringify({
-      role: 'assistant',
-      content: aiResponse,
-      id: crypto.randomUUID()
-    }), {
+            if (done) break
+
+            const chunk = decoder.decode(value, { stream: true })
+            console.log('Raw chunk from Langflow:', chunk)
+            buffer += chunk
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+
+            for (const line of lines) {
+              console.log('Processing line:', line)
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6)
+                if (data === '[DONE]') continue
+
+                try {
+                  const parsed = JSON.parse(data)
+                  console.log('Parsed stream data:', parsed)
+                  // Extract token from Langflow streaming format
+                  const token = parsed.chunk || parsed.token || parsed.message || ''
+                  if (token) {
+                    console.log('Sending token:', token)
+                    controller.enqueue(encoder.encode(token))
+                    await delay(50) // 50ms delay between chunks
+                  }
+                } catch (e) {
+                  console.error('Error parsing stream data:', data, e)
+                }
+              } else if (line.trim()) {
+                // Try parsing non-SSE format
+                try {
+                  const parsed = JSON.parse(line)
+                  console.log('Parsed non-SSE data:', parsed)
+
+                  // Handle Langflow token events
+                  if (parsed.event === 'token' && parsed.data?.chunk) {
+                    const token = parsed.data.chunk
+                    console.log('Sending token:', token)
+                    controller.enqueue(encoder.encode(token))
+                    await delay(50) // 50ms delay between chunks for natural typing effect
+                  }
+                } catch (e) {
+                  // Not JSON, might be plain text
+                  console.log('Non-JSON line:', line)
+                }
+              }
+            }
+          }
+          controller.close()
+        } catch (error) {
+          console.error('Streaming error:', error)
+          controller.error(error)
+        }
+      }
+    })
+
+    return new Response(stream, {
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
       }
     })
   } catch (error) {

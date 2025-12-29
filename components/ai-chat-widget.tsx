@@ -106,7 +106,7 @@ export function AIChatWidget({
 
       <SheetContent
         side="right"
-        className="w-full sm:w-[50vw] lg:w-[33vw] max-w-[800px] flex flex-col p-0 shadow-2xl border-l"
+        className="w-full sm:w-[66vw] lg:w-[40vw] max-w-[1400px] flex flex-col p-0 shadow-2xl border-l"
       >
         <SheetHeader className="p-6 pb-4 border-b">
           <div className="flex items-center justify-between">

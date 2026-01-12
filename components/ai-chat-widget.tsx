@@ -44,6 +44,7 @@ export function AIChatWidget({
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [sessionId] = useState(() => crypto.randomUUID())
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -77,7 +78,8 @@ export function AIChatWidget({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [...messages, userMessage],
-          flowId
+          flowId,
+          sessionId
         })
       })
 

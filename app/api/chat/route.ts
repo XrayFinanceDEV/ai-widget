@@ -3,7 +3,7 @@ export const maxDuration = 30
 
 export async function POST(req: Request) {
   try {
-    const { messages, flowId } = await req.json()
+    const { messages, flowId, sessionId } = await req.json()
 
     // Integrate with Langflow
     const langflowEndpoint = process.env.LANGFLOW_ENDPOINT
@@ -17,12 +17,13 @@ export async function POST(req: Request) {
       throw new Error('Flow ID is required')
     }
 
+    if (!sessionId) {
+      throw new Error('Session ID is required')
+    }
+
     // Get the last user message
     const lastMessage = messages[messages.length - 1]
     const inputValue = lastMessage.content || lastMessage.parts?.find((p: any) => p.type === 'text')?.text || ''
-
-    // Generate session ID for conversation continuity
-    const sessionId = crypto.randomUUID()
 
     // Call Langflow API (matches working example from Langflow)
     const payload = {

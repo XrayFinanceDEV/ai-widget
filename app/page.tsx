@@ -153,14 +153,13 @@ export default function Home() {
       </footer>
 
       <AIChatWidget
-        flowId={process.env.NEXT_PUBLIC_LANGFLOW_FLOW_ID}
         title="AI Assistant"
-        subtitle="Powered by Langflow"
+        subtitle="Powered by Open-Notebook"
         welcomeMessage="Hi! I'm your AI assistant. How can I help you today?"
         quickActions={[
           "What can you do?",
           "Tell me about this widget",
-          "How do I integrate Langflow?",
+          "How do I integrate Open-Notebook?",
         ]}
       />
     </div>

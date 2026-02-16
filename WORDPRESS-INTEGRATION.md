@@ -397,7 +397,7 @@ Aggiungi header CORS in `next.config.js` (vedi sezione Sicurezza)
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Elementor Documentation](https://elementor.com/help/)
 - [WordPress Codex](https://codex.wordpress.org/)
-- [Open-Notebook API Docs](http://192.168.1.200:5055/docs)
+- [Open-Notebook API Docs](https://kpsfinanciallab.w3pro.it:5055/docs)
 
 ---
 

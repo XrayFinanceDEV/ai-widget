@@ -23,7 +23,7 @@ A beautiful, production-ready chat widget for integrating Open-Notebook RAG sear
 
 - Node.js 18+ installed
 - npm, yarn, pnpm, or bun
-- Open-Notebook instance running (default: http://192.168.1.200:5055)
+- Open-Notebook instance running (default: https://kpsfinanciallab.w3pro.it:5055)
 
 ### Installation
 
@@ -41,7 +41,7 @@ npm install
 
 Edit `.env.local` with your configuration:
 ```env
-OPEN_NOTEBOOK_ENDPOINT=http://192.168.1.200:5055
+OPEN_NOTEBOOK_ENDPOINT=https://kpsfinanciallab.w3pro.it:5055
 OPEN_NOTEBOOK_NOTEBOOK_ID=notebook:YOUR_NOTEBOOK_ID
 OPEN_NOTEBOOK_STRATEGY_MODEL=model:0thy08wqjik4v5y6ftqq
 OPEN_NOTEBOOK_CHAT_MODEL=model:0thy08wqjik4v5y6ftqq
@@ -50,7 +50,7 @@ OPEN_NOTEBOOK_CHAT_MODEL=model:0thy08wqjik4v5y6ftqq
 **Getting your Notebook ID:**
 ```bash
 # List all notebooks
-curl http://192.168.1.200:5055/api/notebooks | jq '.[] | {id, name}'
+curl https://kpsfinanciallab.w3pro.it:5055/api/notebooks | jq '.[] | {id, name}'
 
 # Copy the ID of the notebook you want to use
 ```
@@ -58,7 +58,7 @@ curl http://192.168.1.200:5055/api/notebooks | jq '.[] | {id, name}'
 **Getting Model IDs:**
 ```bash
 # List available models
-curl http://192.168.1.200:5055/api/models | jq '.[] | select(.type=="language") | {id, name}'
+curl https://kpsfinanciallab.w3pro.it:5055/api/models | jq '.[] | select(.type=="language") | {id, name}'
 ```
 
 4. Run the development server:
@@ -272,7 +272,7 @@ npx shadcn@latest add <component-name>
 - Check that `OPEN_NOTEBOOK_NOTEBOOK_ID` is set correctly
 - Verify model IDs match your Open-Notebook configuration:
   ```bash
-  curl http://localhost:5055/api/models | jq '.[] | {id, name}'
+  curl https://kpsfinanciallab.w3pro.it:5055/api/models | jq '.[] | {id, name}'
   ```
 - Review API route logs in terminal (both widget and Open-Notebook)
 
@@ -294,12 +294,12 @@ npx shadcn@latest add <component-name>
 ### Testing the hybrid endpoint directly
 ```bash
 # Create a session
-SESSION=$(curl -s -X POST http://localhost:5055/api/chat/sessions \
+SESSION=$(curl -s -X POST https://kpsfinanciallab.w3pro.it:5055/api/chat/sessions \
   -H "Content-Type: application/json" \
   -d '{"notebook_id":"YOUR_NOTEBOOK_ID","title":"Test"}' | jq -r '.id')
 
 # Test chat with RAG
-curl -N -X POST http://localhost:5055/api/chat/rag/execute \
+curl -N -X POST https://kpsfinanciallab.w3pro.it:5055/api/chat/rag/execute \
   -H "Content-Type: application/json" \
   -d "{
     \"session_id\": \"$SESSION\",
@@ -426,7 +426,7 @@ Built with:
 - [Next.js](https://nextjs.org)
 - [shadcn/ui](https://ui.shadcn.com)
 - [Tailwind CSS](https://tailwindcss.com)
-- [Open-Notebook](http://192.168.1.200:5055)
+- [Open-Notebook](https://kpsfinanciallab.w3pro.it:5055)
 
 ## Contributing
 

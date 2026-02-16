@@ -116,7 +116,7 @@ Every time you push to the `main` branch, Netlify automatically:
 Ensure your Open-Notebook endpoint uses HTTPS:
 ```
 ✅ https://kpsfinanciallab.w3pro.it:5055
-❌ http://192.168.1.200:5055 (won't work from Netlify)
+❌ https://kpsfinanciallab.w3pro.it:5055 (won't work from Netlify)
 ```
 
 ### 2. Restrict CORS Origins

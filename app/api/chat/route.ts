@@ -65,12 +65,14 @@ export async function POST(req: Request) {
       console.log('Created new session:', sessionId)
 
       // Store session in cookie (expires in 24 hours)
-      cookieStore.set(SESSION_COOKIE, sessionId, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 // 24 hours
-      })
+      if (sessionId) {
+        cookieStore.set(SESSION_COOKIE, sessionId, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 // 24 hours
+        })
+      }
     } else {
       console.log('Using existing session:', sessionId)
     }

@@ -1,57 +1,113 @@
+import { cookies } from 'next/headers'
+
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30
 
+// Session cookie name
+const SESSION_COOKIE = 'open_notebook_session'
+
 export async function POST(req: Request) {
   try {
-    const { messages, flowId, sessionId } = await req.json()
+    const { messages } = await req.json()
 
-    // Integrate with Langflow
-    const langflowEndpoint = process.env.LANGFLOW_ENDPOINT
-    const langflowApiKey = process.env.LANGFLOW_API_KEY
+    // Get open-notebook configuration
+    const openNotebookEndpoint = process.env.OPEN_NOTEBOOK_ENDPOINT
+    const notebookId = process.env.OPEN_NOTEBOOK_NOTEBOOK_ID
+    const strategyModel = process.env.OPEN_NOTEBOOK_STRATEGY_MODEL
+    const chatModel = process.env.OPEN_NOTEBOOK_CHAT_MODEL
 
-    if (!langflowEndpoint) {
-      throw new Error('LANGFLOW_ENDPOINT not configured')
+    if (!openNotebookEndpoint) {
+      throw new Error('OPEN_NOTEBOOK_ENDPOINT not configured')
     }
-
-    if (!flowId) {
-      throw new Error('Flow ID is required')
+    if (!notebookId) {
+      throw new Error('OPEN_NOTEBOOK_NOTEBOOK_ID not configured')
     }
-
-    if (!sessionId) {
-      throw new Error('Session ID is required')
+    if (!strategyModel || !chatModel) {
+      throw new Error('Model configuration incomplete')
     }
 
     // Get the last user message
     const lastMessage = messages[messages.length - 1]
-    const inputValue = lastMessage.content || lastMessage.parts?.find((p: any) => p.type === 'text')?.text || ''
+    const currentQuestion = lastMessage.content || lastMessage.parts?.find((p: any) => p.type === 'text')?.text || ''
 
-    // Call Langflow API (matches working example from Langflow)
-    const payload = {
-      output_type: 'chat',
-      input_type: 'chat',
-      input_value: inputValue,
-      session_id: sessionId
+    if (!currentQuestion) {
+      throw new Error('No question provided')
     }
 
-    const langflowResponse = await fetch(`${langflowEndpoint}/api/v1/run/${flowId}?stream=true`, {
+    // Get or create chat session
+    const cookieStore = await cookies()
+    let sessionId = cookieStore.get(SESSION_COOKIE)?.value
+
+    if (!sessionId) {
+      console.log('No session found, creating new session...')
+      
+      // Create new session
+      const createSessionResponse = await fetch(`${openNotebookEndpoint}/api/chat/sessions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          notebook_id: notebookId,
+          title: 'Widget Chat',
+          model_override: chatModel
+        })
+      })
+
+      if (!createSessionResponse.ok) {
+        const errorText = await createSessionResponse.text()
+        throw new Error(`Failed to create session: ${createSessionResponse.statusText} - ${errorText}`)
+      }
+
+      const sessionData = await createSessionResponse.json()
+      sessionId = sessionData.id
+
+      console.log('Created new session:', sessionId)
+
+      // Store session in cookie (expires in 24 hours)
+      cookieStore.set(SESSION_COOKIE, sessionId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 // 24 hours
+      })
+    } else {
+      console.log('Using existing session:', sessionId)
+    }
+
+    // Call hybrid chat+RAG endpoint
+    const payload = {
+      session_id: sessionId,
+      message: currentQuestion,
+      strategy_model: strategyModel,
+      model_override: chatModel,
+      stream: true
+    }
+
+    console.log('Calling chat/rag/execute with:', {
+      session_id: sessionId,
+      message: currentQuestion.substring(0, 50) + '...',
+      strategy_model: strategyModel
+    })
+
+    const response = await fetch(`${openNotebookEndpoint}/api/chat/rag/execute`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        ...(langflowApiKey && { 'x-api-key': langflowApiKey })
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
     })
 
-    if (!langflowResponse.ok) {
-      const errorText = await langflowResponse.text()
-      throw new Error(`Langflow API error: ${langflowResponse.statusText} - ${errorText}`)
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Open-notebook API error: ${response.statusText} - ${errorText}`)
     }
 
     // Stream the response directly to the client
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       async start(controller) {
-        const reader = langflowResponse.body?.getReader()
+        const reader = response.body?.getReader()
         const decoder = new TextDecoder()
 
         if (!reader) {
@@ -59,57 +115,60 @@ export async function POST(req: Request) {
           return
         }
 
-        // Helper function to add delay for natural typing effect
-        const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
         try {
           let buffer = ''
+          let accumulatedContent = ''
+
           while (true) {
             const { done, value } = await reader.read()
 
             if (done) break
 
             const chunk = decoder.decode(value, { stream: true })
-            console.log('Raw chunk from Langflow:', chunk)
             buffer += chunk
             const lines = buffer.split('\n')
             buffer = lines.pop() || ''
 
             for (const line of lines) {
-              console.log('Processing line:', line)
               if (line.startsWith('data: ')) {
-                const data = line.slice(6)
-                if (data === '[DONE]') continue
-
+                const data = line.slice(6).trim()
+                
                 try {
                   const parsed = JSON.parse(data)
-                  console.log('Parsed stream data:', parsed)
-                  // Extract token from Langflow streaming format
-                  const token = parsed.chunk || parsed.token || parsed.message || ''
-                  if (token) {
-                    console.log('Sending token:', token)
-                    controller.enqueue(encoder.encode(token))
-                    await delay(50) // 50ms delay between chunks
+                  console.log('Parsed event:', parsed.type)
+                  
+                  // Handle different event types
+                  if (parsed.type === 'strategy') {
+                    console.log('Strategy phase: chunks_retrieved =', parsed.chunks_retrieved)
+                    // Optional: send loading indicator
+                    // controller.enqueue(encoder.encode('[Searching knowledge base...]\n'))
+                  }
+                  else if (parsed.type === 'answer') {
+                    // Stream answer content
+                    const content = parsed.content || ''
+                    if (content) {
+                      console.log('Streaming answer content:', content.substring(0, 100))
+                      
+                      // Send only new content (not already sent)
+                      if (content.length > accumulatedContent.length) {
+                        const newContent = content.substring(accumulatedContent.length)
+                        controller.enqueue(encoder.encode(newContent))
+                        accumulatedContent = content
+                      }
+                    }
+                  }
+                  else if (parsed.type === 'complete') {
+                    console.log('Stream complete, chunks_used:', parsed.chunks_used)
+                    controller.close()
+                    return
+                  }
+                  else if (parsed.type === 'error') {
+                    console.error('Stream error:', parsed.message)
+                    controller.error(new Error(parsed.message))
+                    return
                   }
                 } catch (e) {
-                  console.error('Error parsing stream data:', data, e)
-                }
-              } else if (line.trim()) {
-                // Try parsing non-SSE format
-                try {
-                  const parsed = JSON.parse(line)
-                  console.log('Parsed non-SSE data:', parsed)
-
-                  // Handle Langflow token events
-                  if (parsed.event === 'token' && parsed.data?.chunk) {
-                    const token = parsed.data.chunk
-                    console.log('Sending token:', token)
-                    controller.enqueue(encoder.encode(token))
-                    await delay(50) // 50ms delay between chunks for natural typing effect
-                  }
-                } catch (e) {
-                  // Not JSON, might be plain text
-                  console.log('Non-JSON line:', line)
+                  console.error('Error parsing SSE data:', data, e)
                 }
               }
             }

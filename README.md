@@ -1,14 +1,14 @@
-# AI Chat Widget for Langflow
+# AI Chat Widget for Open-Notebook
 
-A beautiful, production-ready chat widget for integrating Langflow AI agents into your Next.js applications. Features streaming responses, dark mode support, and a sleek UI built with shadcn/ui.
+A beautiful, production-ready chat widget for integrating Open-Notebook RAG search into your Next.js applications. Features streaming responses, dark mode support, and a sleek UI built with shadcn/ui.
 
 ![AI Chat Widget](https://img.shields.io/badge/Next.js-16.0-black) ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue) ![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.0-38bdf8)
 
 ## Features
 
 - ✨ Beautiful, modern UI with shadcn/ui components
-- 🚀 Streaming AI responses with Vercel AI SDK
-- 🔌 Easy integration with Langflow agents
+- 🚀 Streaming AI responses with Open-Notebook RAG
+- 🔌 Direct integration with Open-Notebook search API
 - 🌙 Full dark mode support
 - 📱 Fully responsive design
 - ⚙️ Highly customizable
@@ -23,14 +23,13 @@ A beautiful, production-ready chat widget for integrating Langflow AI agents int
 
 - Node.js 18+ installed
 - npm, yarn, pnpm, or bun
-- OpenAI API key (or Langflow endpoint)
+- Open-Notebook instance running (default: http://192.168.1.200:5055)
 
 ### Installation
 
 1. Clone the repository:
 ```bash
-git clone <your-repo-url>
-cd ai-widget
+cd /home/brix-ia/DEV/ai-widget
 ```
 
 2. Install dependencies:
@@ -39,19 +38,27 @@ npm install
 ```
 
 3. Set up environment variables:
-```bash
-cp .env.local.example .env.local
+
+Edit `.env.local` with your configuration:
+```env
+OPEN_NOTEBOOK_ENDPOINT=http://192.168.1.200:5055
+OPEN_NOTEBOOK_NOTEBOOK_ID=notebook:YOUR_NOTEBOOK_ID
+OPEN_NOTEBOOK_STRATEGY_MODEL=model:0thy08wqjik4v5y6ftqq
+OPEN_NOTEBOOK_CHAT_MODEL=model:0thy08wqjik4v5y6ftqq
 ```
 
-Edit `.env.local` and add your API keys:
-```env
-# For OpenAI (default)
-OPENAI_API_KEY=your_openai_api_key_here
+**Getting your Notebook ID:**
+```bash
+# List all notebooks
+curl http://192.168.1.200:5055/api/notebooks | jq '.[] | {id, name}'
 
-# For Langflow integration
-LANGFLOW_ENDPOINT=http://localhost:7860
-LANGFLOW_API_KEY=your_langflow_api_key_here
-LANGFLOW_FLOW_ID=your_flow_id_here
+# Copy the ID of the notebook you want to use
+```
+
+**Getting Model IDs:**
+```bash
+# List available models
+curl http://192.168.1.200:5055/api/models | jq '.[] | select(.type=="language") | {id, name}'
 ```
 
 4. Run the development server:
@@ -76,13 +83,13 @@ export default function Page() {
       {/* Your page content */}
 
       <AIChatWidget
-        title="AI Assistant"
-        subtitle="Powered by Langflow"
-        welcomeMessage="Hi! How can I help you today?"
+        title="Knowledge Assistant"
+        subtitle="Powered by Open-Notebook"
+        welcomeMessage="Hi! Ask me anything about your documents."
         quickActions={[
-          "What can you do?",
-          "Tell me more",
-          "Help me get started",
+          "What documents do you have?",
+          "Tell me about...",
+          "Search for...",
         ]}
       />
     </div>
@@ -94,65 +101,72 @@ export default function Page() {
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `flowId` | `string?` | `undefined` | Langflow flow ID |
 | `apiEndpoint` | `string?` | `/api/chat` | API endpoint for chat |
 | `welcomeMessage` | `string?` | `"Hi! Ask me anything."` | Initial greeting message |
 | `quickActions` | `string[]?` | `["How can you help me?", ...]` | Quick action buttons |
 | `title` | `string?` | `"AI Assistant"` | Widget title |
 | `subtitle` | `string?` | `undefined` | Optional subtitle/badge |
 
-## Langflow Integration
+## Open-Notebook Integration
 
-### Option 1: Using OpenAI Directly (Default)
+### How It Works
 
-The widget is pre-configured to use OpenAI. Just add your API key to `.env.local`:
+The widget connects to your Open-Notebook instance via the **hybrid `/api/chat/rag/execute` endpoint**, which combines:
 
-```env
-OPENAI_API_KEY=sk-...
+1. **Multi-Search Strategy**: AI generates 3-5 optimized search queries from your question
+2. **Parallel Vector Search**: Executes multiple searches simultaneously across your knowledge base
+3. **Conversational Memory**: Maintains chat history so the AI remembers previous context
+4. **Smart Response**: Generates answers using retrieved documents + conversation history
+
+**Key Benefits:**
+- 🧠 **Remembers context**: "Tell me more about that" works naturally
+- 🎯 **Dynamic RAG**: Every question triggers fresh, relevant searches
+- ⚡ **Faster**: Parallel searches instead of sequential
+- 💾 **Persistent sessions**: Conversations survive page reloads (24h cookie)
+
+### API Response Structure
+
+The hybrid endpoint returns Server-Sent Events (SSE) with these event types:
+
+```typescript
+// Strategy phase (multi-search executed)
+{ "type": "strategy", "chunks_retrieved": 15 }
+
+// Answer streaming (real-time response)
+{ "type": "answer", "content": "Based on the research..." }
+
+// Completion signal
+{ "type": "complete", "chunks_used": 15 }
+
+// Error handling
+{ "type": "error", "message": "..." }
 ```
 
-### Option 2: Integrating with Langflow
+The widget streams `answer` content incrementally to the UI for real-time feel.
 
-To connect to a Langflow agent:
+### Session Management
 
-1. Edit `app/api/chat/route.ts`
-2. Comment out the OpenAI section
-3. Uncomment the Langflow integration section
-4. Update your `.env.local`:
+The widget automatically manages chat sessions:
 
-```env
-LANGFLOW_ENDPOINT=http://localhost:7860
-LANGFLOW_API_KEY=your_api_key
-LANGFLOW_FLOW_ID=your_flow_id
+- **Session Creation**: First message creates a new session
+- **Session Storage**: Session ID stored in HTTP-only cookie (24h expiry)
+- **Conversation Memory**: All messages in the session are remembered
+- **Cross-Page**: Sessions persist across page reloads
+
+**Reset Session (for testing):**
+```bash
+curl -X POST http://localhost:3000/api/chat/reset
 ```
 
-5. Pass the flow ID to the widget:
+Or open your browser DevTools → Application → Cookies → Delete `open_notebook_session`
 
-```tsx
-<AIChatWidget
-  flowId={process.env.NEXT_PUBLIC_LANGFLOW_FLOW_ID}
-/>
-```
+### Configuring Models
 
-### Langflow API Response Structure
+The widget requires two model configurations:
+- `OPEN_NOTEBOOK_STRATEGY_MODEL` - For multi-search query generation
+- `OPEN_NOTEBOOK_CHAT_MODEL` - For conversation and answer generation
 
-The integration expects Langflow to return responses in this format:
-
-```json
-{
-  "outputs": [{
-    "outputs": [{
-      "results": {
-        "message": {
-          "text": "AI response here"
-        }
-      }
-    }]
-  }]
-}
-```
-
-Adjust the response parsing in `app/api/chat/route.ts` if your flow has a different structure.
+Both are set to `model:0thy08wqjik4v5y6ftqq` (Gemini 2.5 Flash) by default.
 
 ## Customization
 
@@ -169,9 +183,9 @@ Customize the quick action buttons:
 ```tsx
 <AIChatWidget
   quickActions={[
-    "Tell me about product X",
-    "How do I integrate?",
-    "Pricing information",
+    "What's in the knowledge base?",
+    "Search for contracts",
+    "Find technical documentation",
   ]}
 />
 ```
@@ -193,7 +207,7 @@ ai-widget/
 ├── app/
 │   ├── api/
 │   │   └── chat/
-│   │       └── route.ts          # Chat API route
+│   │       └── route.ts          # Open-Notebook API integration
 │   ├── globals.css               # Global styles
 │   ├── layout.tsx                # Root layout
 │   └── page.tsx                  # Home page
@@ -202,7 +216,7 @@ ai-widget/
 │   └── ai-chat-widget.tsx        # Main chat widget
 ├── lib/
 │   └── utils.ts                  # Utilities
-└── .env.local.example            # Environment variables template
+└── .env.local                    # Open-Notebook configuration
 ```
 
 ## Key Features Explained
@@ -217,12 +231,11 @@ The chat opens as a slide-in panel without blocking page interaction:
 
 ### Streaming Responses
 
-Real-time AI responses stream token-by-token using Vercel AI SDK's `useChat` hook:
-```tsx
-const { messages, input, handleSubmit, isLoading } = useChat({
-  api: '/api/chat',
-})
-```
+Real-time AI responses stream token-by-token from Open-Notebook:
+- Strategy reasoning appears first
+- Intermediate answers stream as documents are processed
+- Final answer provides the synthesized result
+- All phases visible in real-time for transparency
 
 ### Dark Mode
 
@@ -255,14 +268,153 @@ npx shadcn@latest add <component-name>
 - Check browser console for errors
 
 ### API errors
-- Verify your API key is set in `.env.local`
-- Check that the API endpoint is correct
-- Review API route logs in terminal
+- Verify Open-Notebook is running at the configured endpoint
+- Check that `OPEN_NOTEBOOK_NOTEBOOK_ID` is set correctly
+- Verify model IDs match your Open-Notebook configuration:
+  ```bash
+  curl http://localhost:5055/api/models | jq '.[] | {id, name}'
+  ```
+- Review API route logs in terminal (both widget and Open-Notebook)
+
+### "Session not found" errors
+- Clear your cookies and start a fresh session
+- Check Open-Notebook logs for session creation errors
+- Verify notebook_id exists in Open-Notebook
 
 ### Streaming not working
 - Ensure `maxDuration` is set in the API route
-- Check that your API key has streaming enabled
-- Verify network requests in browser DevTools
+- Check that Open-Notebook streaming is enabled
+- Verify network requests in browser DevTools (should see `text/event-stream`)
+
+### No results from search / AI doesn't remember context
+- **No search results**: Verify your notebook has indexed documents with embeddings
+- **No memory**: Check session cookie is being set (DevTools → Application → Cookies)
+- **Partial memory**: Session might have been reset - check cookie expiry (24h default)
+
+### Testing the hybrid endpoint directly
+```bash
+# Create a session
+SESSION=$(curl -s -X POST http://localhost:5055/api/chat/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"notebook_id":"YOUR_NOTEBOOK_ID","title":"Test"}' | jq -r '.id')
+
+# Test chat with RAG
+curl -N -X POST http://localhost:5055/api/chat/rag/execute \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"session_id\": \"$SESSION\",
+    \"message\": \"What is this notebook about?\",
+    \"stream\": true
+  }"
+```
+
+## 🚀 Deployment
+
+### Quick Decision Guide
+
+**Just want it to work?** → Use Netlify (10 minutes, free)  
+**Need full control?** → Self-host (2-4 hours setup)
+
+See [DEPLOYMENT-OPTIONS.md](DEPLOYMENT-OPTIONS.md) for detailed comparison.
+
+### Deploy to Netlify (Recommended)
+
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start)
+
+Complete guide: [NETLIFY-DEPLOY.md](NETLIFY-DEPLOY.md)
+
+**Benefits:**
+- ✅ HTTPS automatic
+- ✅ Global CDN
+- ✅ Auto-deploy on push
+- ✅ FREE tier (100GB/month)
+
+**Steps:**
+1. Push to GitHub
+2. Connect to Netlify
+3. Set environment variables
+4. Deploy!
+
+Your URL: `https://your-widget.netlify.app`
+
+---
+
+## 🔌 WordPress Integration
+
+See [WORDPRESS-INTEGRATION.md](WORDPRESS-INTEGRATION.md) for complete guide.
+
+**After deploying to Netlify:**
+
+```html
+<!-- Add before </body> tag in WordPress -->
+<script>
+  window.AIWidgetConfig = {
+    baseUrl: 'https://your-widget.netlify.app'
+  };
+</script>
+<script src="https://your-widget.netlify.app/embed.js"></script>
+```
+
+This creates a floating chat button 💬 in the bottom-right corner of your site.
+
+**Methods:**
+1. **Plugin "Insert Headers and Footers"** (easiest)
+2. **Theme editor** (advanced)
+3. **Elementor HTML widget** (page-specific)
+
+---
+
+## 🧪 Local Testing
+
+```bash
+npm run dev
+# Open http://localhost:3000/test-embed.html
+```
+
+Test the embed script locally before deploying to production.
+
+## Production Deployment
+
+### 1. Build
+
+```bash
+npm run build
+```
+
+### 2. Start with PM2
+
+```bash
+npm install -g pm2
+pm2 start npm --name "ai-widget" -- start
+pm2 save
+pm2 startup
+```
+
+### 3. Configure for your domain
+
+Update `.env.local`:
+```env
+OPEN_NOTEBOOK_ENDPOINT=https://your-domain.com:5055
+OPEN_NOTEBOOK_NOTEBOOK_ID=notebook:your_id
+```
+
+### 4. Setup Nginx reverse proxy (optional)
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name kpsfinanciallab.w3pro.it;
+    
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
 
 ## License
 
@@ -272,10 +424,9 @@ MIT
 
 Built with:
 - [Next.js](https://nextjs.org)
-- [Vercel AI SDK](https://ai-sdk.dev)
 - [shadcn/ui](https://ui.shadcn.com)
 - [Tailwind CSS](https://tailwindcss.com)
-- [Langflow](https://langflow.org)
+- [Open-Notebook](http://192.168.1.200:5055)
 
 ## Contributing
 

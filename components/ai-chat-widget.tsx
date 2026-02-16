@@ -13,6 +13,15 @@ import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit 
 import { Loader } from '@/components/ai-elements/loader'
 import { ModeToggle } from '@/components/mode-toggle'
 
+// Simple UUID generator for environments where crypto.randomUUID() is unavailable
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0
+    const v = c === 'x' ? r : (r & 0x3 | 0x8)
+    return v.toString(16)
+  })
+}
+
 interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -20,7 +29,6 @@ interface ChatMessage {
 }
 
 interface AIChatWidgetProps {
-  flowId?: string
   apiEndpoint?: string
   welcomeMessage?: string
   quickActions?: string[]
@@ -29,7 +37,6 @@ interface AIChatWidgetProps {
 }
 
 export function AIChatWidget({
-  flowId,
   apiEndpoint = '/api/chat',
   welcomeMessage = 'Hi! Ask me anything.',
   quickActions = [
@@ -44,7 +51,6 @@ export function AIChatWidget({
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [sessionId] = useState(() => crypto.randomUUID())
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,7 +61,7 @@ export function AIChatWidget({
 
     // Add user message
     const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       role: 'user',
       content: messageContent
     }
@@ -63,7 +69,7 @@ export function AIChatWidget({
     setIsLoading(true)
 
     // Create assistant message that will be updated as stream comes in
-    const assistantMessageId = crypto.randomUUID()
+    const assistantMessageId = generateUUID()
     const assistantMessage: ChatMessage = {
       id: assistantMessageId,
       role: 'assistant',
@@ -77,9 +83,7 @@ export function AIChatWidget({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, userMessage],
-          flowId,
-          sessionId
+          messages: [...messages, userMessage]
         })
       })
 

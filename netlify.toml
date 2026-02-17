@@ -38,7 +38,8 @@
 [[headers]]
   for = "/widget"
   [headers.values]
-    X-Frame-Options = "ALLOW-FROM https://kpsfinanciallab.w3pro.it"
+    X-Frame-Options = "ALLOWALL"
+    Content-Security-Policy = "frame-ancestors 'self' https://brix-ia.com https://*.brix-ia.com https://kpsfinanciallab.w3pro.it"
 
 # Enable streaming responses for AI chat
 [[edge_functions]]

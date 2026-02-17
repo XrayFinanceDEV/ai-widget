@@ -1,16 +1,20 @@
-import { AIChatWidget } from '@/components/ai-chat-widget'
+import { EmbeddedChatWidget } from '@/components/embedded-chat-widget'
+
+export const metadata = {
+  title: 'AI Chat Widget',
+}
 
 export default function WidgetPage() {
   return (
-    <div className="widget-container">
-      <AIChatWidget
-        title="AI Assistant"
+    <div style={{ height: '100vh', overflow: 'hidden' }}>
+      <EmbeddedChatWidget
+        title="BRIX-IA Assistant"
         subtitle="Powered by Open-Notebook"
-        welcomeMessage="Ciao! Come posso aiutarti?"
+        welcomeMessage="Ciao! Sono l'assistente AI di BRIX-IA. Come posso aiutarti?"
         quickActions={[
-          "Di cosa parla questo documento?",
-          "Quali sono le regole principali?",
-          "Spiegami meglio",
+          'Cosa fa BRIX-IA?',
+          'Come posso iscrivermi?',
+          'Parlami dei tuoi servizi',
         ]}
       />
     </div>

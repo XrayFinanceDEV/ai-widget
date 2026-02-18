@@ -9,6 +9,7 @@ import { Conversation, ConversationContent, ConversationScrollButton } from '@/c
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from '@/components/ai-elements/prompt-input'
 import { Loader } from '@/components/ai-elements/loader'
+import { ChatMessage } from '@/components/chat-message'
 
 // Simple UUID generator
 function generateUUID(): string {
@@ -141,7 +142,10 @@ export function EmbeddedChatWidget({
                   </div>
                 )}
                 <MessageContent>
-                  <MessageResponse>{message.content}</MessageResponse>
+                  {message.role === 'assistant'
+                    ? <ChatMessage content={message.content} />
+                    : <MessageResponse>{message.content}</MessageResponse>
+                  }
                 </MessageContent>
                 {message.role === 'user' && (
                   <div className="flex-shrink-0 w-7 h-7 rounded-full bg-secondary flex items-center justify-center">

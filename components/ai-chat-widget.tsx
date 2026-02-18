@@ -12,6 +12,7 @@ import { Message, MessageContent, MessageResponse } from '@/components/ai-elemen
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from '@/components/ai-elements/prompt-input'
 import { Loader } from '@/components/ai-elements/loader'
 import { ModeToggle } from '@/components/mode-toggle'
+import { ChatMessage } from '@/components/chat-message'
 
 // Simple UUID generator for environments where crypto.randomUUID() is unavailable
 function generateUUID(): string {
@@ -192,7 +193,10 @@ export function AIChatWidget({
                     </div>
                   )}
                   <MessageContent>
-                    <MessageResponse>{message.content}</MessageResponse>
+                    {message.role === 'assistant'
+                      ? <ChatMessage content={message.content} />
+                      : <MessageResponse>{message.content}</MessageResponse>
+                    }
                   </MessageContent>
                   {message.role === 'user' && (
                     <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary flex items-center justify-center">

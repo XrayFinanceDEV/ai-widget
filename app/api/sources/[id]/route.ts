@@ -11,8 +11,10 @@ export async function GET(
     return Response.json({ error: 'OPEN_NOTEBOOK_ENDPOINT not configured' }, { status: 500 })
   }
 
+  // Strip _chunk_N suffix if present (e.g. abc123_chunk_2 → abc123)
+  const baseId = id.replace(/_chunk_\d+$/, '')
   // Ensure the ID has the 'source:' prefix
-  const sourceId = id.includes(':') ? id : `source:${id}`
+  const sourceId = baseId.includes(':') ? baseId : `source:${baseId}`
 
   try {
     const resp = await fetch(`${endpoint}/api/sources/${encodeURIComponent(sourceId)}`, {

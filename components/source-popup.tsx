@@ -28,7 +28,7 @@ interface SourceData {
   id: string
   title?: string
   status?: string
-  insight_type?: string
+  full_text?: string
   created?: string
 }
 
@@ -108,20 +108,27 @@ export function SourcePopup({ open, onOpenChange, type, id }: SourcePopupProps) 
                 </div>
               )}
 
-              {/* Source: mostra titolo e metadati */}
+              {/* Source: mostra titolo + full_text se disponibile */}
               {!isInsight && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex items-start gap-2">
                     <FileText className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                     <div>
                       <p className="text-sm font-medium">{source.title || 'Documento senza titolo'}</p>
                       {source.status && (
-                        <Badge variant="secondary" className="mt-1 text-xs">
-                          {source.status}
-                        </Badge>
+                        <Badge variant="secondary" className="mt-1 text-xs">{source.status}</Badge>
                       )}
                     </div>
                   </div>
+                  {source.full_text && (
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed border-t pt-3">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {source.full_text.length > 8000
+                          ? source.full_text.substring(0, 8000) + '\n\n*[documento troncato per visualizzazione]*'
+                          : source.full_text}
+                      </ReactMarkdown>
+                    </div>
+                  )}
                 </div>
               )}
 

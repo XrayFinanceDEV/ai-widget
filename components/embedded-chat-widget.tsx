@@ -52,19 +52,21 @@ export function EmbeddedChatWidget({
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [suggestions, setSuggestions] = useState<string[]>([])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading) return
+  const runQuery = async (messageContent: string) => {
+    if (!messageContent.trim() || isLoading) return
 
-    const messageContent = input
-    setInput('')
+    // Reset suggestions: the previous turn's chips no longer apply once a new
+    // question is in flight. New ones (if any) arrive at end of stream.
+    setSuggestions([])
 
     const userMessage: ChatMessage = {
       id: generateUUID(),
       role: 'user',
       content: messageContent,
     }
+    const baseMessages = messages
     setMessages(prev => [...prev, userMessage])
     setIsLoading(true)
 
@@ -79,7 +81,7 @@ export function EmbeddedChatWidget({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ messages: [...messages, userMessage] }),
+        body: JSON.stringify({ messages: [...baseMessages, userMessage] }),
       })
 
       if (!response.ok) throw new Error('Failed to get response')
@@ -91,6 +93,7 @@ export function EmbeddedChatWidget({
       // JSON-lines protocol from /api/chat:
       //   {"s": "<text>"} → status update (replaces current status)
       //   {"c": "<text>"} → content chunk (appends to answer)
+      //   {"q": [...]}    → follow-up question suggestions
       //   {"e": "<text>"} → error
       // Status is shown only while content is empty. Once content arrives,
       // the status disappears — clean handoff.
@@ -112,6 +115,7 @@ export function EmbeddedChatWidget({
             const obj = JSON.parse(trimmed)
             if (typeof obj.s === 'string') statusLine = obj.s
             else if (typeof obj.c === 'string') contentBuffer += obj.c
+            else if (Array.isArray(obj.q)) setSuggestions(obj.q.filter((s: unknown): s is string => typeof s === 'string' && s.trim().length > 0))
             else if (typeof obj.e === 'string')
               contentBuffer += `\n\n⚠️ ${obj.e}`
           } catch {
@@ -135,6 +139,14 @@ export function EmbeddedChatWidget({
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!input.trim() || isLoading) return
+    const messageContent = input
+    setInput('')
+    await runQuery(messageContent)
   }
 
   return (
@@ -161,28 +173,44 @@ export function EmbeddedChatWidget({
             </div>
           )}
 
-          {messages.map(message => (
-            <Message key={message.id} from={message.role}>
-              <div className="flex gap-2 items-start">
-                {message.role === 'assistant' && (
-                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary flex items-center justify-center">
-                    <Image src={chatIcon} alt="AI" width={20} height={20} className="object-contain" />
+          {(() => {
+            // Suggestions attach only to the most recent assistant message,
+            // and only once that turn is settled (no streaming in progress).
+            const lastAssistantId = [...messages].reverse().find(m => m.role === 'assistant')?.id
+            return messages.map(message => {
+              const showSuggestions =
+                message.role === 'assistant' &&
+                message.id === lastAssistantId &&
+                !isLoading &&
+                suggestions.length > 0
+              return (
+                <Message key={message.id} from={message.role}>
+                  <div className="flex gap-2 items-start">
+                    {message.role === 'assistant' && (
+                      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary flex items-center justify-center">
+                        <Image src={chatIcon} alt="AI" width={20} height={20} className="object-contain" />
+                      </div>
+                    )}
+                    <MessageContent>
+                      {message.role === 'assistant'
+                        ? <ChatMessage
+                            content={message.content}
+                            suggestions={showSuggestions ? suggestions : undefined}
+                            onSuggestionClick={runQuery}
+                          />
+                        : <MessageResponse>{message.content}</MessageResponse>
+                      }
+                    </MessageContent>
+                    {message.role === 'user' && (
+                      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-secondary flex items-center justify-center">
+                        <span className="text-xs">👤</span>
+                      </div>
+                    )}
                   </div>
-                )}
-                <MessageContent>
-                  {message.role === 'assistant'
-                    ? <ChatMessage content={message.content} />
-                    : <MessageResponse>{message.content}</MessageResponse>
-                  }
-                </MessageContent>
-                {message.role === 'user' && (
-                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-secondary flex items-center justify-center">
-                    <span className="text-xs">👤</span>
-                  </div>
-                )}
-              </div>
-            </Message>
-          ))}
+                </Message>
+              )
+            })
+          })()}
 
           {isLoading && (
             <Message from="assistant">
@@ -203,7 +231,7 @@ export function EmbeddedChatWidget({
         <ConversationScrollButton />
       </Conversation>
 
-      {/* Quick actions + input */}
+      {/* Quick actions + suggestions + input */}
       <div className="p-3 pt-2 border-t shrink-0">
         {messages.length === 0 && quickActions.length > 0 && (
           <div className="flex gap-2 mb-2 overflow-x-auto pb-1 scrollbar-hide">

@@ -86,9 +86,11 @@ function parseReferences(text: string): ParsedMessage {
 
 interface ChatMessageProps {
   content: string
+  suggestions?: string[]
+  onSuggestionClick?: (suggestion: string) => void
 }
 
-export function ChatMessage({ content }: ChatMessageProps) {
+export function ChatMessage({ content, suggestions, onSuggestionClick }: ChatMessageProps) {
   const [popupOpen, setPopupOpen] = useState(false)
   const [popupType, setPopupType] = useState<ReferenceType | null>(null)
   const [popupId, setPopupId] = useState<string | null>(null)
@@ -198,6 +200,25 @@ export function ChatMessage({ content }: ChatMessageProps) {
                     {ref.number}
                   </span>
                   {ref.type === 'source_insight' ? 'Insight' : 'Fonte'} {ref.number}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Follow-up suggestion bubbles */}
+        {suggestions && suggestions.length > 0 && (
+          <div className="mt-3 pt-2 border-t border-border/50">
+            <p className="text-xs text-muted-foreground mb-1.5 font-medium">Domande suggerite:</p>
+            <div className="flex flex-wrap gap-1.5">
+              {suggestions.map(suggestion => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => onSuggestionClick?.(suggestion)}
+                  className="text-xs px-3 py-1.5 rounded-full border border-primary/30 bg-primary/5 hover:bg-primary/15 transition-colors cursor-pointer text-foreground"
+                >
+                  {suggestion}
                 </button>
               ))}
             </div>

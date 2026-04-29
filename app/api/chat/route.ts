@@ -1,16 +1,18 @@
 import { cookies } from 'next/headers'
 
-// Run on Edge runtime — Netlify Edge Functions allow ~50s and stream first-byte
-// without buffering (Node serverless functions cap at 26s and buffer, causing 502s).
-export const runtime = 'edge'
-export const maxDuration = 50
+// Self-hosted Next.js: use Node runtime. The Edge runtime here was a Netlify
+// constraint (50s cap, no native Node APIs). Behind nginx on this host there's
+// no platform timeout, so the upstream RAG pipeline can take as long as it
+// needs without the connection being killed mid-stream.
+export const runtime = 'nodejs'
 
 const SESSION_COOKIE = 'open_notebook_session'
 
 // JSON-lines protocol between this route and the widget client:
-//   {"s": "<text>"}   → status update (replaces the current status slot)
-//   {"c": "<text>"}   → content chunk (appends to the answer)
-//   {"e": "<text>"}   → error (client shows it inline)
+//   {"s": "<text>"}    → status update (replaces the current status slot)
+//   {"c": "<text>"}    → content chunk (appends to the answer)
+//   {"q": [...]}       → follow-up question suggestions (3 strings)
+//   {"e": "<text>"}    → error (client shows it inline)
 // Each object is on its own line terminated with \n.
 //
 // Upstream Open Notebook SSE events we consume (from /api/chat/rag/execute):
@@ -118,10 +120,11 @@ export async function POST(req: Request) {
         // Flush first status immediately — fixes Netlify first-byte 502s.
         emit(controller, { s: planningMessages[0] })
 
-        // Hard timeout: leaves headroom under Netlify Edge's 50s cap so we can
-        // emit a clean error instead of being killed mid-stream.
+        // Hard timeout: upper bound to prevent stuck upstream connections from
+        // hanging the route. Self-hosted (no Netlify 50s cap), so we give the
+        // RAG pipeline plenty of headroom.
         const abort = new AbortController()
-        const upstreamTimeout = setTimeout(() => abort.abort(), 45000)
+        const upstreamTimeout = setTimeout(() => abort.abort(), 120000)
 
         let planningTick = 0
         let searchingTick = 0
@@ -167,7 +170,7 @@ export async function POST(req: Request) {
               const data = line.slice(6).trim()
               if (!data) continue
 
-              let parsed: { type?: string; content?: string; reasoning?: string; message?: string; chunks_retrieved?: number }
+              let parsed: { type?: string; content?: string; reasoning?: string; message?: string; chunks_retrieved?: number; items?: string[] }
               try {
                 parsed = JSON.parse(data)
               } catch {
@@ -204,6 +207,11 @@ export async function POST(req: Request) {
                 case 'answer':
                   // Final consolidated answer — already delivered via deltas. Skip.
                   break
+                case 'suggestions': {
+                  const items = Array.isArray(parsed.items) ? parsed.items.filter(s => typeof s === 'string' && s.trim()) : []
+                  if (items.length) emit(controller, { q: items })
+                  break
+                }
                 case 'complete':
                   clearTimeout(upstreamTimeout)
                   controller.close()

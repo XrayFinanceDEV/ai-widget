@@ -1,6 +1,6 @@
 (function() {
   // AI Chat Widget Embed Script
-  // Usage: <script src="https://kpsfinanciallab.w3pro.it:3000/embed.js"></script>
+  // Usage: <script src="https://kpsfinanciallab.w3pro.it:5555/embed.js"></script>
   
   if (typeof window.AIWidget !== 'undefined') {
     console.warn('AI Widget already loaded');
@@ -14,7 +14,7 @@
       // Create iframe for isolation
       const iframe = document.createElement('iframe');
       iframe.id = 'ai-chat-widget-iframe';
-      iframe.src = (config.baseUrl || 'https://kpsfinanciallab.w3pro.it:3000') + '/widget';
+      iframe.src = (config.baseUrl || 'https://kpsfinanciallab.w3pro.it:5555') + '/widget';
       iframe.style.cssText = `
         position: fixed;
         bottom: 0;
